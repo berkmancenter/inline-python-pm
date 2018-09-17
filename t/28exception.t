@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 9;
+use Test::More tests => 12;
 
 use Inline Config => DIRECTORY => './blib_test';
 
@@ -34,34 +34,46 @@ def catch_perl_exception(failer):
 def pass_through_perl_exception(failer):
     failer()
 
+class CustomException(Exception):
+    pass
+
+def custom_exception():
+    raise CustomException()
+
+def zero_division_error():
+    return 1 / 0
+
+def unicode_decode_error():
+    return b"\\xc3\\x28".decode('utf-8')
+
 END
 
 eval {
     error();
 };
 ok(1, 'Survived Python exception');
-like($@, qr/Error! at line 5/, 'Exception found');
+like($@, qr/line \d+, in error\s+Exception: Error!/, 'Exception found');
 
 eval {
     empty_error();
 };
-like($@, qr/Exception:  at line 8/, 'Exception found');
+like($@, qr/line \d+, in empty_error\s+Exception/, 'Exception found');
 
 eval {
     name_error();
 };
-like($@, qr/name 'foo' is not defined at line 11/, 'NameError found');
+like($@, qr/line \d+, in name_error\s+NameError:( global)? name 'foo' is not defined/, 'NameError found');
 
 my $foo = Foo->new;
 eval {
     $foo->error;
 };
-like($@, qr/Exception: Error! at line 15/, 'Exception found');
+like($@, qr/line \d+, in error\s+Exception: Error!/, 'Exception found');
 
 eval {
     thrower()->();
 };
-like($@, qr/name 'foo' is not defined at line 18/, 'Exception found');
+like($@, qr/line \d+, in <lambda>\s+NameError:( global)? name 'foo' is not defined/, 'Exception found');
 
 my $exception = catch_perl_exception(sub { die "fail!"; });
 like($exception, qr/fail!/);
@@ -77,3 +89,18 @@ eval {
     pass_through_perl_exception(sub { die $foo_exception; });
 };
 is(ref $@, 'FooException');
+
+eval {
+    custom_exception();
+};
+like($@, qr/CustomException/);
+
+eval {
+    zero_division_error();
+};
+like($@, qr/ZeroDivisionError/);
+
+eval {
+    unicode_decode_error();
+};
+like($@, qr/UnicodeDecodeError/);
