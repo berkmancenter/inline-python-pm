@@ -628,71 +628,79 @@ croak_python_exception() {
 #endif
             
             PyObject *traceback_module = PyImport_Import(traceback_module_name);    /* new reference */
-            PyObject *format_exception_function = PyObject_GetAttrString(    /* new reference */
-                traceback_module,
-                "format_exception"
-            );
-            
-            if (format_exception_function) {
-                
-                PyObject *traceback_stack = PyObject_CallFunctionObjArgs(   /* new reference */
-                    format_exception_function,
-                    ex_type,
-                    ex_value,
-                    ex_traceback,
-                    NULL
+            if (traceback_module) {
+                PyObject *format_exception_function = PyObject_GetAttrString(    /* new reference */
+                    traceback_module,
+                    "format_exception"
                 );
-                PyObject *traceback = PyUnicode_Join(   /* new reference */
-                    PyUnicode_FromString(""),
-                    traceback_stack
-                );
-                PyObject *traceback_pystr = PyObject_Str(traceback);    /* new reference */
-                
+
+                if (format_exception_function) {
+
+                    PyObject *traceback_stack = PyObject_CallFunctionObjArgs(   /* new reference */
+                        format_exception_function,
+                        ex_type,
+                        ex_value,
+                        ex_traceback,
+                        NULL
+                    );
+                    if (traceback_stack) {
+                        PyObject *traceback = PyUnicode_Join(   /* new reference */
+                                PyUnicode_FromString(""),
+                                traceback_stack
+                        );
+                        PyObject *traceback_pystr = PyObject_Str(traceback);    /* new reference */
+
 #if PY_MAJOR_VERSION >= 3
-                PyObject *traceback_bytes = PyUnicode_AsUTF8String(traceback_pystr);    /* new reference */
-                char *traceback_str_orig = PyBytes_AsString(traceback_bytes);    /* new reference */
+                        PyObject *traceback_bytes = PyUnicode_AsUTF8String(traceback_pystr);    /* new reference */
+                        char *traceback_str_orig = PyBytes_AsString(traceback_bytes);    /* new reference */
 #else
-                char *traceback_str_orig = PyString_AsString(traceback_pystr);    /* new reference */
+                        char *traceback_str_orig = PyString_AsString(traceback_pystr);    /* new reference */
 #endif
 
-                if (traceback_str_orig) {
-                    croak_str = strdup(traceback_str_orig);
-                } else {
-                    PyObject * const tb_lineno = PyObject_GetAttrString(    /* new reference */
-                        ex_traceback,
-                        "tb_lineno"
-                    );
+                        if (traceback_str_orig) {
+                            croak_str = strdup(traceback_str_orig);
+                        } else {
+                            PyObject *const tb_lineno = PyObject_GetAttrString(    /* new reference */
+                                    ex_traceback,
+                                    "tb_lineno"
+                            );
 
-                    size_t needed = snprintf(NULL, 0,
-                        "%s: %s at line %lu\n",
-                        ((PyTypeObject *)ex_type)->tp_name,
-                        c_ex_message,
-                        PyInt_AsLong(tb_lineno)
-                    ) + 1;
-                    croak_str = malloc(needed);
-                    snprintf(croak_str, needed, "%s: %s at line %lu\n",
-                        ((PyTypeObject *)ex_type)->tp_name,
-                        c_ex_message,
-                        PyInt_AsLong(tb_lineno)
-                    );
+                            size_t needed = snprintf(NULL, 0,
+                                                     "%s: %s at line %lu\n",
+                                                     ((PyTypeObject *) ex_type)->tp_name,
+                                                     c_ex_message,
+                                                     PyInt_AsLong(tb_lineno)
+                                            ) + 1;
+                            croak_str = malloc(needed);
+                            snprintf(croak_str, needed, "%s: %s at line %lu\n",
+                                     ((PyTypeObject *) ex_type)->tp_name,
+                                     c_ex_message,
+                                     PyInt_AsLong(tb_lineno)
+                            );
 
-                    Py_DECREF(tb_lineno);
+                            Py_DECREF(tb_lineno);
+                        }
+
+                        Py_DECREF(traceback_str_orig);
+#if PY_MAJOR_VERSION >= 3
+                        Py_DECREF(traceback_bytes);
+#endif
+                        Py_DECREF(traceback_pystr);
+                        Py_DECREF(traceback);
+                        Py_DECREF(traceback_stack);
+                    }
+
+                    Py_DECREF(format_exception_function);
                 }
 
-                Py_DECREF(traceback_str_orig);
-#if PY_MAJOR_VERSION >= 3
-                Py_DECREF(traceback_bytes);
-#endif
-                Py_DECREF(traceback_pystr);
-                Py_DECREF(traceback);
-                Py_DECREF(traceback_stack);
-                Py_DECREF(format_exception_function);
+                Py_DECREF(traceback_module);
             }
-            
-            Py_DECREF(traceback_module);
+
             Py_DECREF(traceback_module_name);
         }
-        else {
+
+        // If one of the traceback routines failed, just print a simple message
+        if (! croak_str) {
 
             size_t needed = snprintf(NULL, 0,
                 "%s: %s", ((PyTypeObject *)ex_type)->tp_name, c_ex_message
