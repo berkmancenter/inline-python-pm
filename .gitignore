@@ -28,3 +28,6 @@ _Inline
 
 # "blib/" for unit tests
 /blib_test/
+
+# Built packages
+*.tar.gz
